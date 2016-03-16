@@ -30,8 +30,8 @@
     NSMutableDictionary *valuesDictionary = [[managedObject dictionaryWithValuesForKeys:[attributesByName allKeys]] mutableCopy];
     //NSLog(@"properties : %@\npropertiesByName : %@\nattributesByName : %@",[entityDescription properties],[entityDescription propertiesByName],[entityDescription attributesByName]);
 
-    if (relationshipsByName.count>0)
-    {
+    if (relationshipsByName.count>0){
+        
         for (NSString *relationshipName in [relationshipsByName allKeys]) {
             NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
             if (![description isToMany]) {
@@ -82,25 +82,20 @@
         
         NSManagedObject *insertManagedObject = [self insertManagedObjectFromStructure:structureDictionary forEntity:strEntityName withManagedObjectContext:managedObjectContext];
         
-        if (insertManagedObject)
-        {
-            //NSLog(@"Before %@ : %d",insertManagedObject.objectID,insertManagedObject.objectID.isTemporaryID);
+        if (insertManagedObject){
 
             //Obtain permanentID for object 
             NSError *error;
             BOOL hasObtainedPermanentID = [managedObjectContext obtainPermanentIDsForObjects:[NSArray arrayWithObjects:insertManagedObject, nil] error:&error]; //;
             if (hasObtainedPermanentID && error == nil){
                 
-                //NSLog(@"After %@ : %d",insertManagedObject.objectID,insertManagedObject.objectID.isTemporaryID);
-                
                 //check context has changes and is saved in context
-                if ([managedObjectContext hasChanges] && [managedObjectContext save:&error])
-                {
+                if ([managedObjectContext hasChanges] && [managedObjectContext save:&error]){
+                    
                     [mutArrAllObjects addObject:insertManagedObject];
                 }
             }
         }
-        
     }
     
     return [mutArrAllObjects copy];
@@ -141,7 +136,12 @@
                 if (![description isToMany]) {
                     NSDictionary *childStructureDictionary = [structureDictionary objectForKey:relationshipName];
                     NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
-                    [managedObject setValue:childObject forKey:relationshipName];
+                    @try {
+                        [managedObject setValue:childObject forKey:relationshipName];
+                    }
+                    @catch (NSException *exception) {
+                        NSLog(@"Exception:%@",exception);
+                    }
                     continue;
                 }
                 
@@ -152,7 +152,6 @@
                     [relationshipSet addObject:childObject];
                 }
             }
-            
         }
         else
         {
@@ -171,7 +170,6 @@
     }
     else
         return nil;
-    
 }
 
 
@@ -247,7 +245,15 @@
             }
             else
             {
-                [managedObject setValuesForKeysWithDictionary:jsonDict];
+                for (NSString *strKey in [jsonDict allKeys]) {
+                    @try {
+                        [managedObject setValue:[jsonDict objectForKey:strKey] forKey:strKey];
+                    }
+                    @catch (NSException *exception) {
+                        NSLog(@"Exception:%@",exception);
+                    }
+                }
+                //[managedObject setValuesForKeysWithDictionary:jsonDict];
             }
             
             if (![managedObject isFault]) {
