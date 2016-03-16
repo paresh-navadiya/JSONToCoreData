@@ -18,5 +18,5 @@
 //upadate NSManagedObject from JSON structure
 - (NSManagedObject *)updateManagedObjectsFromJSONStructure:(NSDictionary *)jsonDict forManagedObject:(NSManagedObject *)managedObject withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext;
 //create NSManagedObject from JSON structure
-- (NSArray <NSManagedObject*> *)insertManagedObjectsFromJSONStructure:(id)jsonData forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext andPersistentStoreCoordinator:(NSPersistentStoreCoordinator *)persistentStoreCoordinator;
+- (NSArray <NSManagedObject*> *)insertManagedObjectsFromJSONStructure:(id)jsonData forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext;
 @end
