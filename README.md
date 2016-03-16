@@ -8,7 +8,7 @@ JSON mapping to its respective object into coredata easily
     "email": "paresh@gmail.com",
   }
 ```
-#####CorrespondingCoreData-generated classes:
+#####Corresponding CoreData-generated classes:
 ```bash
 @interface Person : NSManagedObject
 @property (nonatomic, retain) NSString *name;
