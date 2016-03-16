@@ -1,6 +1,6 @@
 //
-//  ValueTransformer.h
-//  Demo
+//  JSONValueTransformer.h
+//  JSONToCoreData
 //
 //  Created by Paresh on 29/02/16.
 //  Copyright © 2016 Paresh. All rights reserved.
@@ -35,8 +35,6 @@ extern BOOL isNull(id value);
  * One static copy is create and store in the JSONModel class scope.
  */
 @interface JSONValueTransformer : NSObject
-
-@property (strong, nonatomic, readonly) NSDictionary* primitivesNames;
 
 /** @name Resolving cluster class names */
 /**
