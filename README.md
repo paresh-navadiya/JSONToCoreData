@@ -21,10 +21,10 @@ NSArray <NSManagedObject *> *arrAllManagedObjects = [[JSONToCoreData sharedInsta
 ```
 #####Update existing NSManagedObject with JSON Structure
 ```bash
-NSManagedObject *updatedManagedObj = [[JSONToCoreData sharedInstance] updateManagedObjectsFromJSONStructure:dictJson forManagedObject:tempManagedObj withManagedObjectContext:appDelegate.managedObjectContext];
+NSManagedObject *updatedManagedObject = [[JSONToCoreData sharedInstance] updateManagedObjectsFromJSONStructure:dictJson forManagedObject:updatingManagedObject withManagedObjectContext:appDelegate.managedObjectContext];
 ```
 #####Serialize NSManagedObjects to JSON Structure
 ```bash
-NSArray *arrJson = [[JSONToCoreData sharedInstance] jsonStructureFromManagedObjects:arrAllManagedObjects];
-NSLog(@"\nCore Data to JSON ---> arrJson : %@ ",arrJson);
+NSArray *arrJSON = [[JSONToCoreData sharedInstance] jsonStructureFromManagedObjects:arrAllManagedObjects];
+NSLog(@"\nCore Data to JSON ---> arrJson : %@ ",arrJSON);
 ```
