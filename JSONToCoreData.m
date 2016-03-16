@@ -6,7 +6,13 @@
 //  Copyright © 2016 Paresh. All rights reserved.
 //
 
+#import <objc/runtime.h>
+#import <objc/message.h>
+
 #import "JSONToCoreData.h"
+#import "JSONValueTransformer.h"
+
+static JSONValueTransformer* valueTransformer = nil;
 
 @implementation JSONToCoreData
 
@@ -15,6 +21,7 @@
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         sharedObject = [[self alloc] init];
+        valueTransformer = [[JSONValueTransformer alloc] init];
     });
     return sharedObject;
 }
@@ -110,9 +117,12 @@
 
     if (managedObject)
     {
+        NSDictionary *allAttributes = [entity attributesByName];
         NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
+        
         if (relationshipsByName.count>0)
         {
+
             NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
             
             for (NSString *strKey in [structureDictionary allKeys]) {
@@ -120,7 +130,14 @@
                 if (![arrAllRelationShipsKey containsObject:strKey]) {
                     
                     @try {
-                        [managedObject setValue:[structureDictionary objectForKey:strKey] forKey:strKey];
+                        
+                        id jsonValue = [structureDictionary objectForKey:strKey];
+                        if (!isNull(jsonValue)) {
+                            NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                            id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                            if(transformedValue)
+                                [managedObject setValue:transformedValue forKey:strKey];
+                        }
                     }
                     @catch (NSException *exception) {
                         NSLog(@"Exception:%@",exception);
@@ -157,7 +174,13 @@
         {
             for (NSString *strKey in [structureDictionary allKeys]) {
                 @try {
-                    [managedObject setValue:[structureDictionary objectForKey:strKey] forKey:strKey];
+                    id jsonValue = [structureDictionary objectForKey:strKey];
+                    if (!isNull(jsonValue)) {
+                        NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                        id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                        if(transformedValue)
+                            [managedObject setValue:transformedValue forKey:strKey];
+                    }
                 }
                 @catch (NSException *exception) {
                     NSLog(@"Exception:%@",exception);
@@ -182,6 +205,7 @@
     {
         if ([jsonDict isKindOfClass:[NSDictionary class]] && jsonDict.count>0) {
             
+            NSDictionary *allAttributes = [managedObject.entity attributesByName];
             NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
             if (relationshipsByName.count>0)
             {
@@ -192,7 +216,14 @@
                     if (![arrAllRelationShipsKey containsObject:strKey])
                     {
                         @try {
-                            [managedObject setValue:[jsonDict objectForKey:strKey] forKey:strKey];
+                            
+                            id jsonValue = [jsonDict objectForKey:strKey];
+                            if (!isNull(jsonValue)) {
+                                NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                                id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                                if(transformedValue)
+                                    [managedObject setValue:transformedValue forKey:strKey];
+                            }
                         }
                         @catch (NSException *exception) {
                             NSLog(@"Exception:%@",exception);
@@ -247,7 +278,13 @@
             {
                 for (NSString *strKey in [jsonDict allKeys]) {
                     @try {
-                        [managedObject setValue:[jsonDict objectForKey:strKey] forKey:strKey];
+                        id jsonValue = [jsonDict objectForKey:strKey];
+                        if (!isNull(jsonValue)) {
+                            NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                            id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                            if(transformedValue)
+                                [managedObject setValue:transformedValue forKey:strKey];
+                        }
                     }
                     @catch (NSException *exception) {
                         NSLog(@"Exception:%@",exception);
@@ -285,9 +322,16 @@
     {
         if ([jsonDict isKindOfClass:[NSDictionary class]] && jsonDict.count>0) {
             
+            NSDictionary *allAttributes = [managedObject.entity attributesByName];
             for (NSString *strKey in [jsonDict allKeys]) {
                 @try {
-                    [managedObject setValue:[jsonDict objectForKey:strKey] forKey:strKey];
+                    id jsonValue = [jsonDict objectForKey:strKey];
+                    if (!isNull(jsonValue)) {
+                        NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                        id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                        if(transformedValue)
+                            [managedObject setValue:transformedValue forKey:strKey];
+                    }
                 }
                 @catch (NSException *exception) {
                     NSLog(@"Exception:%@",exception);
@@ -305,6 +349,63 @@
     }
     else
         return nil;
+}
+
+#pragma mark - JSONValueTransformer
+
+-(id)transformForValue:(id)jsonValue forValueType:(NSString *)strValueType
+{
+    id transformedValue;
+    // searched around the web how to do this better
+    // but did not find any solution, maybe that's the best idea? (hardly)
+    Class sourceClass = [JSONValueTransformer classByResolvingClusterClasses:[jsonValue class]];
+    
+    //JMLog(@"to type: [%@] from type: [%@] transformer: [%@]", p.type, sourceClass, selectorName);
+    
+    if ([NSStringFromClass(sourceClass) isEqualToString:strValueType]) {
+        transformedValue = jsonValue;
+        return transformedValue;
+    }
+    
+    //build a method selector for the property and json object classes
+    NSString* selectorName = [NSString stringWithFormat:@"%@From%@:",
+                              strValueType, //target name
+                              sourceClass]; //source name
+    SEL selector = NSSelectorFromString(selectorName);
+    
+    //check for custom transformer
+    BOOL foundCustomTransformer = NO;
+    if ([valueTransformer respondsToSelector:selector]) {
+        foundCustomTransformer = YES;
+    } else {
+        //try for hidden custom transformer
+        selectorName = [NSString stringWithFormat:@"__%@",selectorName];
+        selector = NSSelectorFromString(selectorName);
+        if ([valueTransformer respondsToSelector:selector]) {
+            foundCustomTransformer = YES;
+        }
+    }
+    
+    //check if there's a transformer with that name
+    if (foundCustomTransformer) {
+        
+        //it's OK, believe me...
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        //transform the value
+        transformedValue = [valueTransformer performSelector:selector withObject:jsonValue];
+#pragma clang diagnostic pop
+        return transformedValue;
+        
+    } else {
+        
+        // it's not a JSON data type, and there's no transformer for it
+        // if property type is not supported - that's a programmer mistake -> exception
+        @throw [NSException exceptionWithName:@"Type not allowed"
+                                       reason:[NSString stringWithFormat:@"%@ type not supported for %@",strValueType,sourceClass]
+                                     userInfo:nil];
+        return nil;
+    }
 }
 
 
