@@ -1,5 +1,5 @@
 # JSONToCoreData
-JSON mapping to its respective object into coredata with so easy
+JSON mapping to its respective object into coredata easily
 
 #####How a basic mapping looks like: For example, we have JSON:
 ```bash
