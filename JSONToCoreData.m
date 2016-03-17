@@ -1,6 +1,6 @@
 //
 //  JSONToCoreData.m
-//  Demo
+//  JSONToCoreData
 //
 //  Created by Paresh on 29/02/16.
 //  Copyright © 2016 Paresh. All rights reserved.
@@ -16,6 +16,7 @@ static JSONValueTransformer* valueTransformer = nil;
 
 @implementation JSONToCoreData
 
+//shared instance
 + (JSONToCoreData *)sharedInstance {
     static id sharedObject;
     static dispatch_once_t onceToken;
@@ -29,152 +30,226 @@ static JSONValueTransformer* valueTransformer = nil;
 #pragma mark -
 #pragma mark - CoreData To JSON
 
+//JSON structure from NSManagedObject
 - (NSDictionary*)dataStructureFromManagedObject:(NSManagedObject*)managedObject
 {
+    //get all necessary information
     NSEntityDescription *entityDescription = [managedObject entity];
     NSDictionary *attributesByName = [entityDescription attributesByName];
     NSDictionary *relationshipsByName = [entityDescription relationshipsByName];
-    NSMutableDictionary *valuesDictionary = [[managedObject dictionaryWithValuesForKeys:[attributesByName allKeys]] mutableCopy];
-    //NSLog(@"properties : %@\npropertiesByName : %@\nattributesByName : %@",[entityDescription properties],[entityDescription propertiesByName],[entityDescription attributesByName]);
-
-    if (relationshipsByName.count>0){
+    
+    NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+    NSArray *arrAllAttributesKey = [attributesByName allKeys];
+    
+    //firstly add all attributes
+    NSMutableDictionary *valuesDictionary = [[managedObject dictionaryWithValuesForKeys:arrAllAttributesKey] mutableCopy];
+    
+    //now add all relationship attributes
+    for (NSString *relationshipName in arrAllRelationShipsKey) {
+        NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
         
-        for (NSString *relationshipName in [relationshipsByName allKeys]) {
-            NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
-            if (![description isToMany]) {
-                NSManagedObject *relationshipObject = [managedObject valueForKey:relationshipName];
-                NSDictionary *dictJSON = [self dataStructureFromManagedObject:relationshipObject];
-                [valuesDictionary setObject:dictJSON forKey:relationshipName];
-                continue;
-            }
+        //check relationship is to many or not
+        if (![description isToMany]) {
+            NSManagedObject *relationshipObject = [managedObject valueForKey:relationshipName];
             
-            NSSet *relationshipObjects = [managedObject valueForKey:relationshipName];
-            NSMutableArray *relationshipArray = [[NSMutableArray alloc] init];
-            for (NSManagedObject *relationshipObject in relationshipObjects) {
-                NSDictionary *dictJSON = [self dataStructureFromManagedObject:relationshipObject];
-                [relationshipArray addObject:dictJSON];
-            }
-            [valuesDictionary setObject:relationshipArray forKey:relationshipName];
+            //get JSON Structure from relationship
+            NSDictionary *dictJSON = [self dataStructureFromManagedObject:relationshipObject];
+            
+            //set JSON Structure for key
+            [valuesDictionary setObject:dictJSON forKey:relationshipName];
+            continue;
         }
+        
+        //relationship has many
+        NSSet *relationshipObjects = [managedObject valueForKey:relationshipName];
+        //each relationship with many will have one set
+        NSMutableArray *relationshipArray = [[NSMutableArray alloc] init];
+        //iterate one by one
+        for (NSManagedObject *relationshipObject in relationshipObjects) {
+            
+             //get JSON Structure from relationship
+            NSDictionary *dictJSON = [self dataStructureFromManagedObject:relationshipObject];
+            //set JSON Structure for key
+            [relationshipArray addObject:dictJSON];
+        }
+        //Now set JSON Structure for relationship with many
+        [valuesDictionary setObject:relationshipArray forKey:relationshipName];
     }
     
+    //At last provide dictionary
     return valuesDictionary;
 }
 
+//JSON structure from NSManagedObject's
 - (NSArray*)jsonStructureFromManagedObjects:(NSArray*)managedObjects
 {
-    NSMutableArray *dataArray = [[NSMutableArray alloc] init];
-    for (NSManagedObject *managedObject in managedObjects) {
-        [dataArray addObject:[self dataStructureFromManagedObject:managedObject]];
+    //Intialize array to store created JSON Structure from NSManagedObject
+    NSMutableArray *mutArrJSON = [[NSMutableArray alloc] init];
+    
+    //create  JSON Structure from NSManagedObject one by one
+    for (id object in managedObjects) {
+        
+        //check whether array has NSManagedObject or not
+        if ([object isKindOfClass:[NSManagedObject class]])
+        {
+            NSManagedObject *managedObject = (NSManagedObject *)object;
+            //get JSON Structure from NSManagedObject
+            NSDictionary *dictJSON = [self dataStructureFromManagedObject:managedObject];
+            //add JSON Structure in array
+            [mutArrJSON addObject:dictJSON];
+        }
     }
-    return dataArray;
+    return mutArrJSON;
 }
 
 #pragma mark -
-#pragma mark - JSON To CoreData (Create)
+#pragma mark -JSONTo CoreData (Create)
 
 - (NSArray*)insertManagedObjectsFromJSONStructure:(id)jsonData forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext;
 {
+    //Validate
     NSArray *arrJsonData;
     if ([jsonData isKindOfClass:[NSDictionary class]] || [jsonData isKindOfClass:[NSMutableDictionary class]])
         arrJsonData = [NSArray arrayWithObjects:jsonData,nil];
     else if ([jsonData isKindOfClass:[NSArray class]] || [jsonData isKindOfClass:[NSMutableArray class]])
         arrJsonData = jsonData;
     else
-        NSAssert(NO,@"Class : JSONToCoreData | method : managedObjectsFromJSONStructure -> jsonData should be array or dictionary");
+        //NSAssert(NO,@"Class : JSONToCoreData | method : managedObjectsFromJSONStructure -> jsonData should be array or dictionary");
+        return nil;
     
+    //Intialize array to store created object
     NSMutableArray *mutArrAllObjects = [NSMutableArray array];
     
+    //insert one by one in coredata
     for (NSDictionary *structureDictionary in arrJsonData) {
         
+        //get inserted NSManagedObject but with temparoryID
         NSManagedObject *insertManagedObject = [self insertManagedObjectFromStructure:structureDictionary forEntity:strEntityName withManagedObjectContext:managedObjectContext];
         
         if (insertManagedObject){
 
-            //Obtain permanentID for object 
+            //Obtain permanentID for that object
             NSError *error;
-            BOOL hasObtainedPermanentID = [managedObjectContext obtainPermanentIDsForObjects:[NSArray arrayWithObjects:insertManagedObject, nil] error:&error]; //;
+            BOOL hasObtainedPermanentID = [managedObjectContext obtainPermanentIDsForObjects:[NSArray arrayWithObjects:insertManagedObject, nil] error:&error];
+            //has obtained permanentID for object or not
             if (hasObtainedPermanentID && error == nil){
                 
                 //check context has changes and is saved in context
                 if ([managedObjectContext hasChanges] && [managedObjectContext save:&error]){
                     
+                    //add inserted NSManagedObject with permanentID in array
                     [mutArrAllObjects addObject:insertManagedObject];
                 }
             }
         }
     }
     
+    //return all inserted NSManagedObject in CoreData
     return [mutArrAllObjects copy];
 }
 
 - (NSManagedObject*)insertManagedObjectFromStructure:(NSDictionary*)structureDictionary forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjContext
 {
+    //Create NSManagedObject
     //NSManagedObject *managedObject = [NSEntityDescription insertNewObjectForEntityForName:strEntityName inManagedObjectContext:managedObjContext];
     
     NSEntityDescription *entity = [NSEntityDescription entityForName:strEntityName inManagedObjectContext:managedObjContext];
     NSManagedObject * managedObject = (NSManagedObject *)[[NSClassFromString(strEntityName) alloc] initWithEntity:entity insertIntoManagedObjectContext:managedObjContext];
 
-    if (managedObject)
+    if (managedObject != nil && [managedObject isKindOfClass:[NSManagedObject class]])
     {
+        //get all necessary information
         NSDictionary *allAttributes = [entity attributesByName];
         NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
         
-        if (relationshipsByName.count>0)
-        {
-
-            NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+        NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+        NSArray *arrAllAttributesKey = [allAttributes allKeys];
+        
+        //Firstly set value of all its attribute
+        for (NSString *strKey in arrAllAttributesKey) {
             
-            for (NSString *strKey in [structureDictionary allKeys]) {
+            //Expection handling
+            @try {
                 
-                if (![arrAllRelationShipsKey containsObject:strKey]) {
-                    
-                    @try {
-                        
-                        id jsonValue = [structureDictionary objectForKey:strKey];
-                        if (!isNull(jsonValue)) {
-                            NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
-                            id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
-                            if(transformedValue)
-                                [managedObject setValue:transformedValue forKey:strKey];
-                        }
-                    }
-                    @catch (NSException *exception) {
-                        NSLog(@"Exception:%@",exception);
-                    }
+                id jsonValue = [structureDictionary objectForKey:strKey];
+                if (!isNull(jsonValue)) {
+                    NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
+                    id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
+                    if(transformedValue)
+                        [managedObject setValue:transformedValue forKey:strKey];
                 }
             }
-            
-            for (NSString *relationshipName in arrAllRelationShipsKey) {
-                NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
-                NSEntityDescription *destinationEntity = description.destinationEntity;
-                NSString *strDestEntityName = destinationEntity.renamingIdentifier;
-                
-                if (![description isToMany]) {
-                    NSDictionary *childStructureDictionary = [structureDictionary objectForKey:relationshipName];
-                    NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
-                    @try {
-                        [managedObject setValue:childObject forKey:relationshipName];
-                    }
-                    @catch (NSException *exception) {
-                        NSLog(@"Exception:%@",exception);
-                    }
-                    continue;
-                }
-                
-                NSMutableSet *relationshipSet = [managedObject mutableSetValueForKey:relationshipName];
-                NSArray *relationshipArray = [structureDictionary objectForKey:relationshipName];
-                for (NSDictionary *childStructureDictionary in relationshipArray) {
-                    NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
-                    [relationshipSet addObject:childObject];
-                }
+            @catch (NSException *exception) {
+                NSLog(@"Exception:%@",exception);
             }
         }
-        else
-        {
-            for (NSString *strKey in [structureDictionary allKeys]) {
+        
+        //Now set value of all its relationship
+        for (NSString *relationshipName in arrAllRelationShipsKey) {
+            
+            NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
+            NSEntityDescription *destinationEntity = description.destinationEntity;
+            NSString *strDestEntityName = destinationEntity.renamingIdentifier;
+            
+            //check relationship is to many or not
+            if (![description isToMany]) {
+                NSDictionary *childStructureDictionary = [structureDictionary objectForKey:relationshipName];
+                NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
+                
+                //Expection handling
                 @try {
-                    id jsonValue = [structureDictionary objectForKey:strKey];
+                    [managedObject setValue:childObject forKey:relationshipName];
+                }
+                @catch (NSException *exception) {
+                    NSLog(@"Exception:%@",exception);
+                }
+                continue;
+            }
+            
+            //relationship is many
+            NSMutableSet *relationshipSet = [managedObject mutableSetValueForKey:relationshipName];
+            NSArray *relationshipArray = [structureDictionary objectForKey:relationshipName];
+            //iterate one by one
+            for (NSDictionary *childStructureDictionary in relationshipArray) {
+                NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
+                [relationshipSet addObject:childObject];
+            }
+        }
+        
+        return managedObject;
+    }
+    else
+    {
+        //NSAssert(NO,@"Class : JSONToCoreData | method : insertManagedObjectFromStructure -> needed NSManagedObject was not created");
+        return nil;
+    }
+}
+
+
+#pragma mark -
+#pragma mark -JSONTo CoreData (Update)
+
+//upadate NSManagedObject from JSON structure
+- (NSManagedObject *)updateManagedObjectsFromJSONStructure:(NSDictionary *)jsonDict forManagedObject:(NSManagedObject *)managedObject withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext
+{
+    //validate
+    if (managedObject != nil && [managedObject isKindOfClass:[NSManagedObject class]])
+    {
+        if ([jsonDict isKindOfClass:[NSDictionary class]] && jsonDict.count>0) {
+            
+            //get all necessary information
+            NSDictionary *allAttributes = [managedObject.entity attributesByName];
+            NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
+            
+            NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+            NSArray *arrAllAttributesKey = [allAttributes allKeys];
+
+            //Firstly set value of all its attribute
+            for (NSString *strKey in arrAllAttributesKey) {
+                
+                //Expection handling
+                @try {
+                    id jsonValue = [jsonDict objectForKey:strKey];
                     if (!isNull(jsonValue)) {
                         NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
                         id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
@@ -186,113 +261,60 @@ static JSONValueTransformer* valueTransformer = nil;
                     NSLog(@"Exception:%@",exception);
                 }
             }
-            //[managedObject setValuesForKeysWithDictionary:structureDictionary];
-        }
-        
-        return managedObject;
-    }
-    else
-        return nil;
-}
-
-
-#pragma mark -
-#pragma mark - JSON To CoreData (Update)
-
-- (NSManagedObject *)updateManagedObjectsFromJSONStructure:(NSDictionary *)jsonDict forManagedObject:(NSManagedObject *)managedObject withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext
-{
-    if (managedObject != nil)
-    {
-        if ([jsonDict isKindOfClass:[NSDictionary class]] && jsonDict.count>0) {
             
-            NSDictionary *allAttributes = [managedObject.entity attributesByName];
-            NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
-            if (relationshipsByName.count>0)
-            {
-                NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+            //Now set value of all its relationship
+            for (NSString *relationshipName in arrAllRelationShipsKey) {
+                NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
+                //NSEntityDescription *destinationEntity = description.destinationEntity;
+                //NSString *strDestEntityName = destinationEntity.renamingIdentifier;
                 
-                for (NSString *strKey in [jsonDict allKeys]) {
-                    
-                    if (![arrAllRelationShipsKey containsObject:strKey])
+                 //check relationship is to many or not
+                if (![description isToMany]) {
+                    NSDictionary *childStructureDictionary = [jsonDict objectForKey:relationshipName];
+                    NSManagedObject *childObject = [managedObject valueForKey:relationshipName];
+                    childObject = [self updateChildManagedObjectsFromJSONStructure:childStructureDictionary forManagedObject:childObject withManagedObjectContext:managedObjectContext];
+                    if (childObject)
                     {
+                        //Expection handling
                         @try {
-                            
-                            id jsonValue = [jsonDict objectForKey:strKey];
-                            if (!isNull(jsonValue)) {
-                                NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
-                                id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
-                                if(transformedValue)
-                                    [managedObject setValue:transformedValue forKey:strKey];
-                            }
+                            [managedObject setValue:childObject forKey:relationshipName];
+                        }
+                        @catch (NSException *exception) {
+                            NSLog(@"Exception:%@",exception);
+                        }
+                    }
+                    continue;
+                }
+                
+                 //relationship is many
+                NSMutableSet *relationshipSet = [managedObject mutableSetValueForKey:relationshipName];
+                NSArray *relationshipArray = [jsonDict objectForKey:relationshipName];
+                
+                //get all NSManagedObject for relationship so it can be updated
+                NSArray *arrAllObjects = [[managedObject valueForKey:relationshipName] allObjects];
+                //iterate one by one
+                for (int i = 0; i<[relationshipArray count]; i++)
+                {
+                    //get child JSON structure for relationship
+                    NSDictionary *childStructureDictionary = [relationshipArray objectAtIndex:i];
+                    //get NSManagedObject for relationship
+                    NSManagedObject *childObject = [arrAllObjects objectAtIndex:i];
+                    //Update with JSON Structure
+                    childObject = [self updateChildManagedObjectsFromJSONStructure:childStructureDictionary forManagedObject:childObject withManagedObjectContext:managedObjectContext];
+                    if (childObject)
+                    {
+                        //Expection handling
+                        @try {
+                            [relationshipSet addObject:childObject];
                         }
                         @catch (NSException *exception) {
                             NSLog(@"Exception:%@",exception);
                         }
                     }
                 }
-                
-                for (NSString *relationshipName in arrAllRelationShipsKey) {
-                    NSRelationshipDescription *description = [relationshipsByName objectForKey:relationshipName];
-                    //NSEntityDescription *destinationEntity = description.destinationEntity;
-                    //NSString *strDestEntityName = destinationEntity.renamingIdentifier;
-                    
-                    if (![description isToMany]) {
-                        NSDictionary *childStructureDictionary = [jsonDict objectForKey:relationshipName];
-                        NSManagedObject *childObject = [managedObject valueForKey:relationshipName];
-                        childObject = [self updateChildManagedObjectsFromJSONStructure:childStructureDictionary forManagedObject:childObject withManagedObjectContext:managedObjectContext];
-                        if (childObject)
-                        {
-                            @try {
-                                [managedObject setValue:childObject forKey:relationshipName];
-                            }
-                            @catch (NSException *exception) {
-                                NSLog(@"Exception:%@",exception);
-                            }
-                        }
-                        continue;
-                    }
-                    
-                    NSMutableSet *relationshipSet = [managedObject mutableSetValueForKey:relationshipName];
-                    NSArray *relationshipArray = [jsonDict objectForKey:relationshipName];
-                    
-                    NSArray *arrAllObjects = [[managedObject valueForKey:relationshipName] allObjects];
-                    
-                    for (int i = 0; i<[relationshipArray count]; i++)
-                    {
-                        NSDictionary *childStructureDictionary = [relationshipArray objectAtIndex:i];
-                        NSManagedObject *childObject = [arrAllObjects objectAtIndex:i];
-                        childObject = [self updateChildManagedObjectsFromJSONStructure:childStructureDictionary forManagedObject:childObject withManagedObjectContext:managedObjectContext];
-                        if (childObject)
-                        {
-                            @try {
-                                [relationshipSet addObject:childObject];
-                            }
-                            @catch (NSException *exception) {
-                                NSLog(@"Exception:%@",exception);
-                            }
-                        }
-                    }
-                }
             }
-            else
-            {
-                for (NSString *strKey in [jsonDict allKeys]) {
-                    @try {
-                        id jsonValue = [jsonDict objectForKey:strKey];
-                        if (!isNull(jsonValue)) {
-                            NSString *strValueType = [[allAttributes objectForKey:strKey] attributeValueClassName];
-                            id transformedValue = [self transformForValue:jsonValue forValueType:strValueType];
-                            if(transformedValue)
-                                [managedObject setValue:transformedValue forKey:strKey];
-                        }
-                    }
-                    @catch (NSException *exception) {
-                        NSLog(@"Exception:%@",exception);
-                    }
-                }
-                //[managedObject setValuesForKeysWithDictionary:jsonDict];
-            }
-            
+
+            //Refresh NSManagedObject and update
             if (![managedObject isFault]) {
                 [managedObjectContext refreshObject:managedObject mergeChanges:YES];
                 NSError *error = nil;
@@ -308,17 +330,21 @@ static JSONValueTransformer* valueTransformer = nil;
         }
         else
         {
-            NSAssert(NO,@"Class : JSONToCoreData | method : updateManagedObjectsFromJSONStructure -> jsonDict should be dictionary and should not be null");
+            //NSAssert(NO,@"Class : JSONToCoreData | method : updateManagedObjectsFromJSONStructure -> jsonDict should be dictionary and should not be null");
             return nil;
         }
     }
     else
+    {
+        //NSAssert(NO,@"Class : JSONToCoreData | method : updateChildManagedObjectsFromJSONStructure -> managedObject should not be null");
         return nil;
+    }
 }
 
+//INTERNAL (update relationship NSManagedObject from JSON structure)
 - (NSManagedObject *)updateChildManagedObjectsFromJSONStructure:(NSDictionary *)jsonDict forManagedObject:(NSManagedObject *)managedObject withManagedObjectContext:(NSManagedObjectContext*)managedObjContext
 {
-    if (managedObject != nil)
+    if (managedObject != nil && [managedObject isKindOfClass:[NSManagedObject class]])
     {
         if ([jsonDict isKindOfClass:[NSDictionary class]] && jsonDict.count>0) {
             
@@ -337,22 +363,25 @@ static JSONValueTransformer* valueTransformer = nil;
                     NSLog(@"Exception:%@",exception);
                 }
             }
-            //[managedObject setValuesForKeysWithDictionary:jsonDict];
             
+            //return updated relationship NSManagedObject
             return managedObject;
         }
         else
         {
-            NSAssert(NO,@"Class : JSONToCoreData | method : updateChildManagedObjectsFromJSONStructure -> jsonDict should be dictionary and should not be null");
+            //NSAssert(NO,@"Class : JSONToCoreData | method : updateChildManagedObjectsFromJSONStructure -> jsonDict should be dictionary and should not be null");
             return nil;
         }
     }
     else
+    {
+        //NSAssert(NO,@"Class : JSONToCoreData | method : updateChildManagedObjectsFromJSONStructure -> managedObject should not be null");
         return nil;
+    }
 }
 
 #pragma mark - JSONValueTransformer
-
+//TranformJSONValue to NSManagedObject's AttributeType
 -(id)transformForValue:(id)jsonValue forValueType:(NSString *)strValueType
 {
     id transformedValue;
@@ -367,7 +396,7 @@ static JSONValueTransformer* valueTransformer = nil;
         return transformedValue;
     }
     
-    //build a method selector for the property and json object classes
+    //build a method selector for the property and JSON object classes
     NSString* selectorName = [NSString stringWithFormat:@"%@From%@:",
                               strValueType, //target name
                               sourceClass]; //source name
@@ -399,7 +428,7 @@ static JSONValueTransformer* valueTransformer = nil;
         
     } else {
         
-        // it's not a JSON data type, and there's no transformer for it
+        // it's not aJSONdata type, and there's no transformer for it
         // if property type is not supported - that's a programmer mistake -> exception
         @throw [NSException exceptionWithName:@"Type not allowed"
                                        reason:[NSString stringWithFormat:@"%@ type not supported for %@",strValueType,sourceClass]

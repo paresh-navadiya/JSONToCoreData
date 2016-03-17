@@ -1,6 +1,6 @@
 //
 //  JSONToCoreData.h
-//  Demo
+//  JSONToCoreData
 //
 //  Created by Paresh on 29/02/16.
 //  Copyright © 2016 Paresh. All rights reserved.
@@ -15,7 +15,7 @@
 + (JSONToCoreData *)sharedInstance;
 //JSON structure from NSManagedObject
 - (NSArray*)jsonStructureFromManagedObjects:(NSArray <NSManagedObject*> *)managedObjects;
-//upadate NSManagedObject from JSON structure
+//update NSManagedObject from JSON structure
 - (NSManagedObject *)updateManagedObjectsFromJSONStructure:(NSDictionary *)jsonDict forManagedObject:(NSManagedObject *)managedObject withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext;
 //create NSManagedObject from JSON structure
 - (NSArray <NSManagedObject*> *)insertManagedObjectsFromJSONStructure:(id)jsonData forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjectContext;
