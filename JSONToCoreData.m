@@ -134,6 +134,9 @@ static JSONValueTransformer* valueTransformer = nil;
             //has obtained permanentID for object or not
             if (hasObtainedPermanentID && error == nil){
                 
+                //refresh object in context
+                [managedObjectContext refreshObject:insertManagedObject mergeChanges:YES];
+                
                 //check context has changes and is saved in context
                 if ([managedObjectContext hasChanges] && [managedObjectContext save:&error]){
                     
@@ -381,11 +384,10 @@ static JSONValueTransformer* valueTransformer = nil;
 }
 
 #pragma mark - JSONValueTransformer
-//TranformJSONValue to NSManagedObject's AttributeType
+//Tranform JSONValue to NSManagedObject's AttributeType
 -(id)transformForValue:(id)jsonValue forValueType:(NSString *)strValueType
 {
     id transformedValue;
-    // searched around the web how to do this better
     // but did not find any solution, maybe that's the best idea? (hardly)
     Class sourceClass = [JSONValueTransformer classByResolvingClusterClasses:[jsonValue class]];
     
