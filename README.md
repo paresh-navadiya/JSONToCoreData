@@ -19,6 +19,10 @@ JSON mapping to its respective object into coredata easily
 ```bash
 NSArray <NSManagedObject *> *arrAllManagedObjects = [[JSONToCoreData sharedInstance] insertManagedObjectsFromJSONStructure:dictJson forEntity:@"Person" withManagedObjectContext:appDelegate.managedObjectContext];
 ```
+Note : It will transform JSON Value if necessary to map to NSManagedObject's AttributeType
+```bash
+-(id)transformForValue:(id)jsonValue forValueType:(NSString *)strValueType
+```
 #####Update existing NSManagedObject with JSON Structure
 ```bash
 NSManagedObject *updatedManagedObject = [[JSONToCoreData sharedInstance] updateManagedObjectsFromJSONStructure:dictJson forManagedObject:updatingManagedObject withManagedObjectContext:appDelegate.managedObjectContext];
