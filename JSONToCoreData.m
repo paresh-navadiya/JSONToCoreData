@@ -92,15 +92,15 @@ static JSONValueTransformer* valueTransformer = nil;
 }
 
 //JSON structure from NSManagedObject's
-- (NSArray*)jsonStructureFromManagedObjects:(NSArray*)managedObjects
+- (NSArray*)jsonStructureFromManagedObjects:(NSArray*)arrManagedObjects
 {
     //Intialize array to store created JSON Structure from NSManagedObject
     NSMutableArray *mutArrJSON = [[NSMutableArray alloc] init];
     
-     if ([self isValidArrayWithData:managedObjects])
+     if ([self isValidArrayWithData:arrManagedObjects])
      {
          //create  JSON Structure from NSManagedObject one by one
-         for (id object in managedObjects) {
+         for (id object in arrManagedObjects) {
              
              //check whether array has NSManagedObject or not
              if ([self isValidManagedObject:object])
@@ -127,7 +127,7 @@ static JSONValueTransformer* valueTransformer = nil;
 {
     //Need to convert json to array if necessary so we can iterate multiple objects
     //Consider it can be NSDictionary or NSArray so need to maintain only one NSArray
-    //Also it can be validated here
+    //Also it can be validated here that it accepts only NSDictionary or NSArray
     NSArray *arrJsonData = [self createJSONDataToArrayIfNecessary:jsonData];
     
     //Validation
@@ -223,17 +223,22 @@ static JSONValueTransformer* valueTransformer = nil;
             //check relationship is to many or not
             if (![description isToMany]) {
                 NSDictionary *childStructureDictionary = [structureDictionary objectForKey:relationshipName];
-                NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
                 
-                if ([self isValidManagedObject:childObject])
+                if ([self isValidDictionaryWithData:childStructureDictionary])
                 {
-                    //Expection handling
-                    @try {
-                        [managedObject setValue:childObject forKey:relationshipName];
+                    NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
+                    
+                    if ([self isValidManagedObject:childObject])
+                    {
+                        //Expection handling
+                        @try {
+                            [managedObject setValue:childObject forKey:relationshipName];
+                        }
+                        @catch (NSException *exception) {
+                            NSLog(@"Exception:%@",exception);
+                        }
                     }
-                    @catch (NSException *exception) {
-                        NSLog(@"Exception:%@",exception);
-                    }
+
                 }
                 
                 continue;
@@ -244,10 +249,15 @@ static JSONValueTransformer* valueTransformer = nil;
             NSArray *relationshipArray = [structureDictionary objectForKey:relationshipName];
             //iterate one by one
             for (NSDictionary *childStructureDictionary in relationshipArray) {
-                NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
                 
-                if ([self isValidManagedObject:childObject])
-                    [relationshipSet addObject:childObject];
+                if ([self isValidDictionaryWithData:childStructureDictionary])
+                {
+                    NSManagedObject *childObject = [self insertManagedObjectFromStructure:childStructureDictionary forEntity:strDestEntityName withManagedObjectContext:managedObjContext];
+                    
+                    if ([self isValidManagedObject:childObject])
+                        [relationshipSet addObject:childObject];
+                }
+                
             }
         }
         
