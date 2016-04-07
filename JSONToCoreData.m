@@ -169,18 +169,13 @@ static JSONValueTransformer* valueTransformer = nil;
         }
         
         //check context has changes and is saved in context
-        if ([managedObjectContext hasChanges]) {
+        NSError *error = nil;
+        if ([managedObjectContext hasChanges] && ![managedObjectContext save:&error]){
             
-            NSError *error = nil;
-            BOOL isSaved = [managedObjectContext save:&error];
-            if (error && isSaved) {
-                //return all inserted NSManagedObject in CoreData
-                return [mutArrAllObjects copy];
-            }
-            else
-                return nil;
+            return [mutArrAllObjects copy];
         }
         else
+            NSLog(@"ERROR : %@",[error description]);
             return nil;
     }
 }
