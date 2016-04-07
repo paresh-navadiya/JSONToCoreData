@@ -161,21 +161,30 @@ static JSONValueTransformer* valueTransformer = nil;
                         //refresh object in context
                         [managedObjectContext refreshObject:insertManagedObject mergeChanges:YES];
                         
-                        //check context has changes and is saved in context
-                        if ([managedObjectContext hasChanges] && [managedObjectContext save:&error]){
-                            
-                            //add inserted NSManagedObject with permanentID in array
-                            [mutArrAllObjects addObject:insertManagedObject];
-                        }
+                        //add inserted NSManagedObject with permanentID in array
+                        [mutArrAllObjects addObject:insertManagedObject];
                     }
                 }
             }
         }
         
-        //return all inserted NSManagedObject in CoreData
-        return [mutArrAllObjects copy];
+        //check context has changes and is saved in context
+        if ([managedObjectContext hasChanges]) {
+            
+            NSError *error = nil;
+            BOOL isSaved = [managedObjectContext save:&error];
+            if (error && isSaved) {
+                //return all inserted NSManagedObject in CoreData
+                return [mutArrAllObjects copy];
+            }
+            else
+                return nil;
+        }
+        else
+            return nil;
     }
 }
+
 
 - (NSManagedObject*)insertManagedObjectFromStructure:(NSDictionary*)structureDictionary forEntity:(NSString *)strEntityName withManagedObjectContext:(NSManagedObjectContext*)managedObjContext
 {
@@ -183,17 +192,18 @@ static JSONValueTransformer* valueTransformer = nil;
     //NSManagedObject *managedObject = [NSEntityDescription insertNewObjectForEntityForName:strEntityName inManagedObjectContext:managedObjContext];
     
     NSEntityDescription *entity = [NSEntityDescription entityForName:strEntityName inManagedObjectContext:managedObjContext];
+    
+    //get all necessary information
+    NSDictionary *allAttributes = [entity attributesByName];
+    NSDictionary *relationshipsByName = [entity relationshipsByName];
+    
+    NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
+    NSArray *arrAllAttributesKey = [allAttributes allKeys];
+    
     NSManagedObject * managedObject = (NSManagedObject *)[[NSClassFromString(strEntityName) alloc] initWithEntity:entity insertIntoManagedObjectContext:managedObjContext];
     
     if ([self isValidManagedObject:managedObject])
     {
-        //get all necessary information
-        NSDictionary *allAttributes = [entity attributesByName];
-        NSDictionary *relationshipsByName = [[managedObject entity] relationshipsByName];
-        
-        NSArray *arrAllRelationShipsKey = [relationshipsByName allKeys];
-        NSArray *arrAllAttributesKey = [allAttributes allKeys];
-        
         //Firstly set value of all its attribute
         for (NSString *strKey in arrAllAttributesKey) {
             
